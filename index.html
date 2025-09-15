@@ -1,73 +1,195 @@
-console.clear();
-/* SETUP */
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(
-75,
-window.innerWidth / window.innerHeight,
-0.1,
-5000
-);
-camera.position.z = 500;
-const renderer = new THREE.WebGLRenderer();
-renderer.setPixelRatio(window.devicePixelRatio > 1 ? 2 : 1);
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-/* CONTROLS */
-const controlsWebGL = new THREE.OrbitControls(camera, renderer.domElement);
-/* PARTICLES */
-// Create a global gsap timeline that contains all tweens
-const tl = gsap.timeline({
-repeat: -1,
-yoyo: true
-});
-const path = document.querySelector("path");
-const length = path.getTotalLength();
-const vertices = [];
-for (let i = 0; i < length; i += 0.1) {
-const point = path.getPointAtLength(i);
-const vector = new THREE.Vector3(point.x, -point.y, 0);
-vector.x += (Math.random() - 0.5) * 30;
-vector.y += (Math.random() - 0.5) * 30;
-vector.z += (Math.random() - 0.5) * 70;
-vertices.push(vector);
-// Create a tween for that vector
-tl.from(vector, {
-x: 600 / 2, // Center X of the heart
-y: -552 / 2, // Center Y of the heart
-z: 0, // Center of the scene
-ease: "power2.inOut",
-duration: "random(2, 5)" // Random duration
-},
-i * 0.002 // Delay calculated from the distance along the path
-);
-}
-const geometry = new THREE.BufferGeometry().setFromPoints(vertices);
-const material = new THREE.PointsMaterial( { color: 0xee5282, blending: THREE.AdditiveBlending, size: 3 } );
-const particles = new THREE.Points(geometry, material);
-// Offset the particles in the scene based on the viewbox values
-particles.position.x -= 600 / 2;
-particles.position.y += 552 / 2;
-scene.add(particles);
-gsap.fromTo(scene.rotation, {
-y: -0.2
-}, {
-y: 0.2,
-repeat: -1,
-yoyo: true,
-ease: 'power2.inOut',
-duration: 3
-});
-/* RENDERING */
-function render() {
-requestAnimationFrame(render);
-// Update the geometry from the animated vertices
-geometry.setFromPoints(vertices);
-renderer.render(scene, camera);
-}
-/* EVENTS */
-function onWindowResize() {
-camera.aspect = window.innerWidth / window.innerHeight;
-camera.updateProj
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Te Amo ❤️</title>
+  <style>
+    html, body { height:100%; margin:0; overflow:hidden;
+      background: radial-gradient(ellipse at center, #0c0c14 0%, #06060a 100%); }
+    canvas{display:block}
+    h1{
+      position:fixed; top:15px; width:100%; text-align:center; z-index:20; pointer-events:none;
+      color:#ff6b6b; font:700 2.2rem/1.1 system-ui,Segoe UI,Roboto,Inter,Arial;
+      text-shadow:0 0 15px rgba(255,107,107,.7); letter-spacing:2px; transform-origin:center top;
+    }
+    .hint{position:fixed;left:12px;bottom:12px;color:#fff;font:12px/1.4 system-ui,Segoe UI,Roboto,Inter,Arial;
+      opacity:.7;user-select:none;background:rgba(255,255,255,.06);padding:.5rem .6rem;border-radius:.6rem;backdrop-filter:blur(6px); z-index:20}
+    /* Botón para iniciar música (por políticas de autoplay) */
+    .play-overlay{
+      position:fixed; inset:auto 12px 12px auto; z-index:25;
+      background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.2);
+      padding:.55rem .8rem; border-radius:.7rem; cursor:pointer; backdrop-filter: blur(8px);
+      font:600 13px/1 system-ui,Segoe UI,Roboto,Inter,Arial;
+      transition:transform .2s ease, opacity .2s ease; opacity:.9;
+    }
+    .play-overlay:hover{ transform:scale(1.03); opacity:1 }
+  </style>
+</head>
+<body>
+  <h1 id="title">Te Amo</h1>
+  <div class="hint">Arrastra para orbitar • Rueda para zoom</div>
+  <button id="playBtn" class="play-overlay">▶️ Música</button>
+  <audio id="bgm" src="music.mp3" preload="none"></audio>
+
+  <!-- LIBS sin módulos -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r155/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r155/examples/js/controls/OrbitControls.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <script>
+    // ===== SETUP =====
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x000000, 1400, 2600);
+
+    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 8000);
+    camera.position.set(0,0,520);
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = 0.06;
+    controls.minDistance = 200; controls.maxDistance = 1600;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+
+    const tl = gsap.timeline({ repeat:-1, yoyo:true });
+
+    // ===== FONDO DE PARTÍCULAS (cielo) =====
+    function makeStarfield(count=6000, radius=2600, size=2, opacity=0.5){
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(count*3);
+      for(let i=0;i<count;i++){
+        // puntos aleatorios en una esfera
+        const u = Math.random(), v = Math.random();
+        const theta = 2*Math.PI*u, phi = Math.acos(2*v-1);
+        const r = radius * (0.7 + Math.random()*0.3);
+        pos[i*3+0] = r * Math.sin(phi)*Math.cos(theta);
+        pos[i*3+1] = r * Math.sin(phi)*Math.sin(theta);
+        pos[i*3+2] = r * Math.cos(phi);
+      }
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos,3));
+
+      const mat = new THREE.PointsMaterial({
+        size, transparent:true, opacity,
+        color: 0xffffff, depthWrite:false
+      });
+
+      const stars = new THREE.Points(geo, mat);
+      stars.matrixAutoUpdate = true;
+      stars.renderOrder = -1; // atrás
+      return stars;
+    }
+
+    const starsA = makeStarfield(4500, 2500, 1.6, 0.5);
+    const starsB = makeStarfield(3500, 2000, 1.2, 0.35);
+    scene.add(starsA, starsB);
+
+    // rotación lenta del fondo
+    gsap.to(starsA.rotation, { y: "+=6.2831", duration: 220, ease: "none", repeat: -1 });
+    gsap.to(starsB.rotation, { y: "-=6.2831", duration: 160, ease: "none", repeat: -1 });
+
+    // “Titilar” alternado
+    gsap.to(starsA.material, { opacity: 0.35, duration: 2.4, yoyo: true, repeat: -1, ease: "sine.inOut" });
+    gsap.to(starsB.material, { opacity: 0.55, duration: 3.1, yoyo: true, repeat: -1, ease: "sine.inOut", delay: 0.7 });
+
+    // ===== CORAZÓN PARAMÉTRICO =====
+    const verts = [];
+    const N = 4200, s = 18;
+    for (let i = 0; i < N; i++){
+      const t = (i / N) * Math.PI * 2;
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = 13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t);
+      const v = new THREE.Vector3(x*s, -y*s, 0);
+      v.x += (Math.random()-0.5)*26;
+      v.y += (Math.random()-0.5)*26;
+      v.z += (Math.random()-0.5)*70;
+      verts.push(v);
+      tl.from(v, { x:0, y:0, z:0, ease:"power2.inOut", duration: gsap.utils.random(2,5) }, i*0.002);
+    }
+
+    const positions = new Float32Array(verts.length*3);
+    const colors = new Float32Array(verts.length*3);
+    const col = new THREE.Color();
+    for (let i=0;i<verts.length;i++){
+      positions[i*3+0] = verts[i].x;
+      positions[i*3+1] = verts[i].y;
+      positions[i*3+2] = verts[i].z;
+      col.setHSL(0.96 + (Math.random()*0.02 - 0.01), 0.75, 0.60 + (Math.random()*0.08 - 0.04));
+      colors[i*3+0]=col.r; colors[i*3+1]=col.g; colors[i*3+2]=col.b;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions,3));
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(colors,3));
+    const mat = new THREE.PointsMaterial({
+      size:3, vertexColors:true, transparent:true, opacity:0.95,
+      blending:THREE.AdditiveBlending, depthWrite:false
+    });
+    const heart = new THREE.Points(geo, mat);
+    heart.renderOrder = 10; // delante
+    scene.add(heart);
+
+    // Latido + título
+    gsap.to(heart.scale, { x:1.04, y:1.04, z:1.04, duration:0.9, ease:"sine.inOut", yoyo:true, repeat:-1 });
+    gsap.to("#title", { scale:1.04, duration:0.9, ease:"sine.inOut", yoyo:true, repeat:-1 });
+
+    // Oscilación de la escena
+    gsap.fromTo(scene.rotation, { y:-0.2 }, { y:0.2, duration:3, ease:"power2.inOut", yoyo:true, repeat:-1 });
+
+    const posAttr = geo.getAttribute("position");
+
+    // ===== LOOP =====
+    function render(){
+      requestAnimationFrame(render);
+      controls.update();
+      for (let i=0;i<verts.length;i++){
+        posAttr.array[i*3+0] = verts[i].x;
+        posAttr.array[i*3+1] = verts[i].y;
+        posAttr.array[i*3+2] = verts[i].z;
+      }
+      posAttr.needsUpdate = true;
+      renderer.render(scene, camera);
+    }
+    render();
+
+    // ===== RESIZE =====
+    addEventListener("resize", ()=>{
+      camera.aspect = innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ===== AUDIO (toca para reproducir una vez) =====
+    const btn = document.getElementById('playBtn');
+    const audio = document.getElementById('bgm');
+
+    async function tryPlay(){
+      try{
+        btn.disabled = true;
+        await audio.play();
+        btn.textContent = "🔊 Reproduciendo";
+        btn.style.opacity = .6;
+        setTimeout(()=>btn.remove(), 1200); // ocultar luego de iniciar
+      }catch(e){
+        // Si el navegador no dejó, volvemos a habilitar
+        btn.disabled = false;
+        btn.textContent = "▶️ Permitir audio";
+        console.log("No se pudo reproducir aún:", e);
+      }
+    }
+    btn.addEventListener('click', tryPlay, { passive:true });
+
+    // intento de autoplay silencioso: cargar y reproducir al primer gesto en la página
+    const once = ()=>{ tryPlay(); window.removeEventListener('pointerdown', once); };
+    window.addEventListener('pointerdown', once, { passive:true, once:true });
+  </script>
+</body>
+</html>
+
+
 
 
 
