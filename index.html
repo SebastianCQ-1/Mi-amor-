@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Te Amo ❤️</title>
+  <style>
+    html, body { height:100%; margin:0; overflow:hidden;
+      background: radial-gradient(ellipse at center, #0c0c14 0%, #06060a 100%); }
+    canvas{display:block}
+    h1{
+      position:fixed; top:15px; width:100%; text-align:center; z-index:10; pointer-events:none;
+      color:#ff6b6b; font:700 2.2rem/1.1 system-ui,Segoe UI,Roboto,Inter,Arial;
+      text-shadow:0 0 15px rgba(255,107,107,.7); letter-spacing:2px;
+    }
+    .hint{position:fixed;left:12px;bottom:12px;color:#fff;font:12px/1.4 system-ui,Segoe UI,Roboto,Inter,Arial;
+      opacity:.7;user-select:none;background:rgba(255,255,255,.06);padding:.5rem .6rem;border-radius:.6rem;backdrop-filter:blur(6px)}
+    svg{position:absolute;width:0;height:0;overflow:hidden}
+  </style>
+</head>
+<body>
+  <h1>Te Amo</h1>
+  <div class="hint">Arrastra para orbitar • Rueda para zoom</div>
+
+  <!-- Ruta SVG (viewBox 600×552) -->
+  <svg viewBox="0 0 600 552" aria-hidden="true">
+    <path id="heartPath"
+      d="M300,520
+         C 50,350   0,200   150,120
+         C 240,70  300,120  300,160
+         C 300,120 360,70   450,120
+         C 600,200 550,350  300,520 Z" />
+  </svg>
+
+  <!-- LIBS sin módulos -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r155/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r155/examples/js/controls/OrbitControls.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <script>
+    // ===== SETUP =====
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x000000, 1200, 2200);
+
+    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
+    camera.position.set(0,0,500);
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 200;
+    controls.maxDistance = 1400;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+    const tl = gsap.timeline({ repeat:-1, yoyo:true });
+
+    // ===== PATH & PARTICLES =====
+    const pathEl = document.getElementById("heartPath");
+    const length = pathEl.getTotalLength();
+
+    const verts = [];
+    for (let i = 0; i < length; i += 0.15) {
+      const p = pathEl.getPointAtLength(i);
+      const v = new THREE.Vector3(p.x, -p.y, 0);
+      v.x += (Math.random()-0.5)*30;
+      v.y += (Math.random()-0.5)*30;
+      v.z += (Math.random()-0.5)*70;
+      verts.push(v);
+
+      tl.from(v, {
+        x: 600/2, y: -552/2, z: 0,
+        ease: "power2.inOut",
+        duration: gsap.utils.random(2,5)
+      }, i*0.002);
+    }
+
+    // Geometría: crear UNA vez y luego actualizar positions
+    const positions = new Float32Array(verts.length*3);
+    const colors = new Float32Array(verts.length*3);
+    const col = new THREE.Color();
+
+    for (let i=0;i<verts.length;i++){
+      positions[i*3+0] = verts[i].x - 600/2;
+      positions[i*3+1] = verts[i].y + 552/2;
+      positions[i*3+2] = verts[i].z;
+
+      col.setHSL(0.96 + (Math.random()*0.02 - 0.01), 0.75, 0.60 + (Math.random()*0.08 - 0.04));
+      colors[i*3+0] = col.r; colors[i*3+1] = col.g; colors[i*3+2] = col.b;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size:3, vertexColors:true, transparent:true, opacity:0.95,
+      blending:THREE.AdditiveBlending, depthWrite:false
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+
+    // Latido + oscilación
+    gsap.to(particles.scale, { x:1.04, y:1.04, z:1.04, duration:0.9, ease:"sine.inOut", yoyo:true, repeat:-1 });
+    gsap.fromTo(scene.rotation, { y:-0.2 }, { y:0.2, duration:3, ease:"power2.inOut", yoyo:true, repeat:-1 });
+
+    const posAttr = geometry.getAttribute("position");
+
+    // ===== LOOP =====
+    function render(){
+      requestAnimationFrame(render);
+      controls.update();
+
+      for (let i=0;i<verts.length;i++){
+        posAttr.array[i*3+0] = verts[i].x - 600/2;
+        posAttr.array[i*3+1] = verts[i].y + 552/2;
+        posAttr.array[i*3+2] = verts[i].z;
+      }
+      posAttr.needsUpdate = true;
+
+      renderer.render(scene, camera);
+    }
+    render();
+
+    // ===== RESIZE =====
+    addEventListener("resize", ()=>{
+      camera.aspect = innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
